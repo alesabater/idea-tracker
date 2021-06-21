@@ -1,0 +1,90 @@
+basePath: /
+consumes:
+- application/json
+definitions:
+  Idea:
+    description: Idea defines the structure for an API idea
+    properties:
+      description:
+        type: string
+        x-go-name: Description
+      id:
+        description: the id for this idea
+        format: int64
+        minimum: 0
+        type: integer
+        x-go-name: ID
+      name:
+        type: string
+        x-go-name: Name
+      questions:
+        $ref: '#/definitions/IdeaQAs'
+    required:
+    - id
+    type: object
+    x-go-package: github.com/alesabater/idea-tracker/idea-api/data
+  IdeaQA:
+    description: IdeaQA test
+    properties:
+      answer:
+        type: string
+        x-go-name: Answer
+      id:
+        format: int64
+        type: integer
+        x-go-name: ID
+      question:
+        type: string
+        x-go-name: Question
+    type: object
+    x-go-package: github.com/alesabater/idea-tracker/idea-api/data
+  IdeaQAs:
+    items:
+      $ref: '#/definitions/IdeaQA'
+    type: array
+    x-go-package: github.com/alesabater/idea-tracker/idea-api/data
+info:
+  description: Documentation for Ideas API
+  title: of Product API
+  version: 1.0.0
+paths:
+  /ideas:
+    get:
+      description: returns a list of ideas
+      operationId: listIdeas
+      responses:
+        "200":
+          $ref: '#/responses/ideasResponse'
+      tags:
+      - ideas
+  /ideas/{id}:
+    delete:
+      description: returns a list of ideas
+      operationId: deleteIdea
+      parameters:
+      - description: The id of the idea for which the operation relates
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+        x-go-name: ID
+      responses:
+        "201":
+          $ref: '#/responses/noContent'
+      tags:
+      - ideas
+produces:
+- application/json
+responses:
+  ideasResponse:
+    description: A list of ideas
+    schema:
+      items:
+        $ref: '#/definitions/Idea'
+      type: array
+  noContent:
+    description: No content is returned by this API endpoint
+schemes:
+- http
+swagger: "2.0"

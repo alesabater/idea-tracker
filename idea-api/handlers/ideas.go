@@ -1,12 +1,29 @@
+// Package classification of Product API
+//
+// Documentation for Ideas API
+//
+//	Schemes: http
+//	BasePath: /
+//	Version: 1.0.0
+//
+//	Consumes:
+//	- application/json
+//
+//	Produces:
+//	- application/json
+//
+// swagger:meta
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
-	"regexp"
 	"strconv"
 
 	"github.com/alesabater/idea-tracker/idea-api/data"
+	"github.com/gorilla/mux"
 )
 
 // IdeaService struct
@@ -19,82 +36,29 @@ func NewIdeaService(l *log.Logger) *IdeaService {
 	return &IdeaService{l}
 }
 
-func (i *IdeaService) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	// handle the request for a list of products
-	if r.Method == http.MethodGet {
-		i.getIdeas(rw, r)
-		return
-	}
-
-	if r.Method == http.MethodPost {
-		i.addIdea(rw, r)
-		return
-	}
-
-	if r.Method == http.MethodPut {
-		i.l.Println("Handle PUT")
-		// expect ID in URI
-		xp := regexp.MustCompile(`/([0-9]+)`)
-		g := xp.FindAllStringSubmatch(r.URL.Path, -1)
-		if len(g) != 1 {
-			http.Error(rw, "Invalid URI", http.StatusBadRequest)
-			return
-		}
-		if len(g[0]) != 2 {
-			http.Error(rw, "Invalid URI", http.StatusBadRequest)
-			return
-		}
-		idStr := g[0][1]
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			http.Error(rw, "Invalid URI", http.StatusBadRequest)
-			return
-		}
-
-		i.updateIdea(id, rw, r)
-		return
-
-	}
-	// catch all
-	// if no method is satisfied return an error
-	rw.WriteHeader(http.StatusMethodNotAllowed)
+// GenericError is a generic error message returned by a server
+type GenericError struct {
+	Message string `json:"message"`
 }
 
-func (i *IdeaService) getIdeas(rw http.ResponseWriter, r *http.Request) {
-	i.l.Println("Handle get Ideas")
-
-	li := data.GetIdeas()
-
-	err := li.ToJSON(rw)
-	if err != nil {
-		http.Error(rw, "Unable to get ideas List", http.StatusInternalServerError)
-	}
-}
-
-func (i *IdeaService) addIdea(rw http.ResponseWriter, r *http.Request) {
+func (i IdeaService) AddIdea(rw http.ResponseWriter, r *http.Request) {
 	i.l.Println("Handle POST Idea")
 
-	idea := &data.Idea{}
-	err := idea.FromJSON(r.Body)
-	if err != nil {
-		http.Error(rw, "Unable to unmarshal JSON idea", http.StatusBadRequest)
-	}
-
-	data.AddIdea(idea)
-
-	i.l.Printf("Idea: %#v", idea)
+	idea := r.Context().Value(KeyIdea{}).(data.Idea)
+	data.AddIdea(&idea)
 }
 
-func (i *IdeaService) updateIdea(id int, rw http.ResponseWriter, r *http.Request) {
+func (i IdeaService) UpdateIdea(rw http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(rw, "Error updating product. Unable to convert ID", http.StatusBadRequest)
+	}
 	i.l.Println("Handle PUT Idea")
 
-	idea := &data.Idea{}
-	err := idea.FromJSON(r.Body)
-	if err != nil {
-		http.Error(rw, "Unable to unmarshal JSON idea", http.StatusBadRequest)
-	}
+	idea := r.Context().Value(KeyIdea{}).(data.Idea)
 
-	err = data.UpdateIdea(id, idea)
+	err = data.UpdateIdea(id, &idea)
 	if err == data.ErrIdeaNotFound {
 		http.Error(rw, "Product not found", http.StatusNotFound)
 		return
@@ -102,4 +66,45 @@ func (i *IdeaService) updateIdea(id int, rw http.ResponseWriter, r *http.Request
 	if err != nil {
 		http.Error(rw, "Error updating product", http.StatusInternalServerError)
 	}
+}
+
+type KeyIdea struct{}
+
+func (i IdeaService) MiddlewareIdeaValidation(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		idea := data.Idea{}
+
+		err := data.FromJSON(idea, r.Body)
+		if err != nil {
+			i.l.Println("[ERROR] deserializing product", err)
+			http.Error(rw, "Unable to unmarshal JSON idea", http.StatusBadRequest)
+			return
+		}
+
+		err = idea.Validate()
+		if err != nil {
+			i.l.Println("[ERROR] deserializing product", err)
+			http.Error(rw, fmt.Sprintf("Unable to unmarshal JSON idea: %s", err), http.StatusBadRequest)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), KeyIdea{}, idea)
+		r = r.WithContext(ctx)
+
+		next.ServeHTTP(rw, r)
+	})
+}
+
+func getIdeaID(r *http.Request) int {
+	// parse the product id from the url
+	vars := mux.Vars(r)
+
+	// convert the id into an integer and return
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		// should never happen
+		panic(err)
+	}
+
+	return id
 }

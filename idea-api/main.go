@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/alesabater/idea-tracker/idea-api/handlers"
+	"github.com/go-openapi/runtime/middleware"
+	"github.com/gorilla/mux"
+	gohandlers "github.com/gorilla/handlers"
 )
 
 func main() {
@@ -18,12 +21,38 @@ func main() {
 	l := log.New(os.Stdout, "idea-api", log.LstdFlags)
 	ig := handlers.NewIdeaService(l)
 
-	sm := http.NewServeMux()
-	sm.Handle("/", ig)
+	// root router
+	sm := mux.NewRouter()
+
+	// turns subrouter into a router
+	getRouter := sm.Methods(http.MethodGet).Subrouter()
+	getRouter.HandleFunc("/", ig.GetIdeas)
+
+	putRouter := sm.Methods(http.MethodPut).Subrouter()
+	putRouter.HandleFunc("/{id:[0-9]+}", ig.UpdateIdea)
+	putRouter.Use(ig.MiddlewareIdeaValidation)
+
+	postRouter := sm.Methods(http.MethodPost).Subrouter()
+	postRouter.HandleFunc("/", ig.AddIdea)
+	postRouter.Use(ig.MiddlewareIdeaValidation)
+
+	deleteRouter := sm.Methods(http.MethodDelete).Subrouter()
+	deleteRouter.HandleFunc("/{id:[0-9]+}", ig.DeleteIdea)
+	//sm.Handle("/ideas", ig)
+
+	opts := middleware.RedocOpts{SpecURL: "/swagger.yaml"}
+	sh := middleware.Redoc(opts, nil)
+
+	getRouter.Handle("/docs", sh)
+	getRouter.Handle("/swagger.yaml", http.FileServer(http.Dir("./")))
+
+	sm = mux.NewRouter()
+
+	ch := gohandlers.CORS(gohandlers.AllowedOrigins([]string{"*"}))
 
 	s := &http.Server{
-		Addr:         ":9090",
-		Handler:      ig,
+		Addr:         ":9091",
+		Handler:      ch(sm),
 		ErrorLog:     l,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,

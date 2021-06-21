@@ -1,40 +1,35 @@
 package data
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"time"
+
+	"github.com/go-playground/validator/v10"
 )
 
 // Idea defines the structure for an API idea
+// swagger:model
 type Idea struct {
-	ID          int    `json:"id"` // struct tags (go functionality)
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	CreatedOn   string `json:"-"`
-	UpdatedOn   string `json:"-"`
-	DeletedOn   string `json:"-"`
+	// the id for this idea
+	//
+	// required: true
+	// min: 0
+	ID          int     `json:"id" validate:"required"` // struct tags (go functionality)
+	Name        string  `json:"name" validate:"required"`
+	Description string  `json:"description"`
+	QAList      IdeaQAs `json:"questions"`
+	CreatedOn   string  `json:"-"`
+	UpdatedOn   string  `json:"-"`
+	DeletedOn   string  `json:"-"`
 }
 
 // Ideas List of ideas
 type Ideas []*Idea
 
-// Decode functionality
-
-// ToJSON returns ideas as their JSON representation
-func (i *Ideas) ToJSON(w io.Writer) error {
-	e := json.NewEncoder(w)
-	return e.Encode(i)
+func (i *Idea) Validate() error {
+	validate := validator.New()
+	return validate.Struct(i)
 }
-
-// FromJSON returns a Idea from a JSON format
-func (i *Idea) FromJSON(r io.Reader) error {
-	e := json.NewDecoder(r)
-	return e.Decode(i)
-}
-
-// RESTful functionlity
 
 // GetIdeas returns a list of ideas
 func GetIdeas() Ideas {
@@ -44,16 +39,31 @@ func GetIdeas() Ideas {
 // AddIdea adds an idea to the list of ideas
 func AddIdea(i *Idea) {
 	i.ID = getNextID()
+	i.QAList = getDefaultQAList()
 	ideaList = append(ideaList, i)
 }
 
+// UpdateIdea updates idea
 func UpdateIdea(id int, i *Idea) error {
 	_, pos, err := findIdea(id)
 	if err != nil {
 		return err
 	}
 	i.ID = id
+	i.QAList = getDefaultQAList()
 	ideaList[pos] = i
+	return nil
+}
+
+// DeleteProduct deletes a product from the database
+func DeleteIdea(id int) error {
+	i := findIndexByIdeaID(id)
+	if i == -1 {
+		return ErrIdeaNotFound
+	}
+
+	ideaList = append(ideaList[:i], ideaList[i+1])
+
 	return nil
 }
 
@@ -67,6 +77,16 @@ func findIdea(id int) (*Idea, int, error) {
 	}
 
 	return nil, -1, ErrIdeaNotFound
+}
+
+func findIndexByIdeaID(id int) int {
+	for i, p := range ideaList {
+		if p.ID == id {
+			return i
+		}
+	}
+
+	return -1
 }
 
 // Utility functionality
@@ -83,6 +103,7 @@ var ideaList = []*Idea{
 		ID:          1,
 		Name:        "My first idea",
 		Description: "My first idea description",
+		QAList:      getDefaultQAList(),
 		CreatedOn:   time.Now().UTC().String(),
 		UpdatedOn:   time.Now().UTC().String(),
 	},
@@ -90,6 +111,7 @@ var ideaList = []*Idea{
 		ID:          2,
 		Name:        "My second idea",
 		Description: "My second idea description",
+		QAList:      getDefaultQAList(),
 		CreatedOn:   time.Now().UTC().String(),
 		UpdatedOn:   time.Now().UTC().String(),
 	},
